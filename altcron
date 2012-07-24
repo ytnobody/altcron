@@ -1,0 +1,60 @@
+#!/bin/sh
+
+REPO_DIR=$HOME/.altcron/repo
+CRONTAB_FILE=$REPO_DIR/crontab
+WD=$(pwd -P)
+
+helpmsg () {
+    crontab -h 2>&1 | sed '1,2d; s/crontab/altcron/g' > /dev/stderr
+    git | awk '/^See /{gsub(/git/,"altcron");} /^$/,/^See /' > /dev/stderr 
+}
+
+if [ ! -d "$REPO_DIR" ] ; then
+    mkdir $REPO_DIR -pv
+    cd $REPO_DIR
+    git init
+    cd $WD
+    echo '' > $CRONTAB_FILE
+fi
+
+if [ $( echo "$1" | sed -n '/^-/p;' ) ] ; then
+    subcommand=
+elif [ $1 ] ; then
+    subcommand=$1
+    shift
+else 
+    subcommand=
+fi
+
+if [ $subcommand ]; then 
+    case $subcommand in
+        "help")
+            if [ $( echo "$1" | sed -n '/^-/p' ) ] ; then
+                helpmsg
+            else 
+                git help $1
+            fi
+        ;;
+        *)
+            cd $REPO_DIR
+            git $subcommand $*
+            cd $WD
+        ;;
+    esac
+else
+    MD5=$(md5sum $CRONTAB_FILE | cut -d ' ' -f 1)
+        
+    crontab $* 2>/dev/null || helpmsg
+    crontab -l > $CRONTAB_FILE
+        
+    cd $REPO_DIR
+    if [ "$MD5" != "$(md5sum crontab | cut -d ' ' -f 1)" ] ; then
+        git add crontab &&
+            ( echo 'Please type a commit message, because crontab was edited. ' ; echo -n 'commit message> ' ) &&
+            read MES &&
+            ( git commit -m "$MES" || ( git reset HEAD && git checkout ./crontab && crontab ./crontab ) )
+    fi
+    cd $WD
+fi
+
+exit
